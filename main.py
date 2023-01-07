@@ -4,67 +4,65 @@ import fileinput
 class Node:
     def __init__(self, s_, t_):
         self.str = s_
-        self.children = dict()
+        self.children = {}
         self.is_terminal = t_
 
-    def extract(self, i, t):
+    def split(self, i):
         if i != len(self.str):
             new = Node(self.str[i:], self.is_terminal)
             new.children = self.children
             self.str = self.str[:i]
             self.children = {new.str[0]: new}
-        self.is_terminal = t
 
-    def suggest(self, word_, sug, i_, mistake, acc):
-        if mistake:
-            if i_ < len(word_):
-                next_n = self.children.get(word_[i_])
-                if next_n:
-                    if next_n.str == word_[i_:i_ + len(next_n.str)]:
-                        if next_n.str == word_[i_:] and next_n.is_terminal:
-                            sug.add(acc + next_n.str)
-                        next_n.suggest(word_, sug, i_ + len(next_n.str), True, acc + next_n.str)
-            return
+    def mistake(self, word_, sug, acc):
+        if len(word_) > 0:
+            next_n = self.children.get(word_[0])
+            if next_n:
+                if next_n.str == word_[:len(next_n.str)]:
+                    if next_n.str == word_ and next_n.is_terminal:
+                        sug.add(acc + next_n.str)
+                    next_n.mistake(word_[len(next_n.str):], sug, acc + next_n.str)
+
+    def suggest(self, word_, sug, acc):
         for node in self.children.values():
             l_ = len(node.str)
-            l_new = len(acc + node.str)
-            for it, char in enumerate(node.str):
-                if len(word_) <= it + i_ or char != word_[it + i_]:
-                    l_ = it
+            l_new = len(node.str)
+            for i_, ch in enumerate(node.str):
+                if len(word_) <= i_ or ch != word_[i_]:
+                    l_ = i_
                     break
             if len(node.str) == l_:
                 if l_new in [len(word_), len(word_) - 1] and node.is_terminal:
                     sug.add(acc + node.str)
-                node.suggest(word_, sug, i_ + l_, False, acc + node.str)
+                node.suggest(word_[l_new:], sug, acc + node.str)
                 continue
-            l_ = len(node.str)
-            if node.str[l_:] == word_[i_ + l_ + 1:l_new + 1]:
+
+            if node.str[l_:] == word_[l_ + 1:l_new + 1]:
                 if l_new == (len(word_) - 1) and node.is_terminal:
                     sug.add(acc + node.str)
-                node.suggest(word_, sug, i_ + l_ + 1, True, acc + node.str)
+                node.mistake(word_[l_new + 1:], sug, acc + node.str)
 
-            if node.str[l_ + 1:] == word_[i_ + l_:l_new - 1]:
+            if node.str[l_ + 1:] == word_[l_:l_new - 1]:
                 if l_new == (len(word_) + 1) and node.is_terminal:
                     sug.add(acc + node.str)
-                node.suggest(word_, sug, i_ + l_ - 1, True, acc + node.str)
+                node.mistake(word_[l_new - 1:], sug, acc + node.str)
 
-            if node.str[l_ + 1:] == word_[i_ + l_ + 1:l_new]:
+            if node.str[l_ + 1:] == word_[l_ + 1:l_new]:
                 if l_new == len(word_) and node.is_terminal:
                     sug.add(acc + node.str)
-                node.suggest(word_, sug, i_ + l_, True, acc + node.str)
+                node.mistake(word_[l_new:], sug, acc + node.str)
 
-            if i_ + l_ + 1 < len(word_) and (word_[i_ + l_] in node.children) and word_[i_ + l_ + 1] == node.str[i_]:
-                adjusted = word_[:i_ + l_] + word_[i_ + l_ + 1] + word_[i_ + l_] + word_[i_ + l_ + 1 + 1:]
-                if l_new == len(word_) and node.is_terminal:
-                    sug.add(acc + node.str)
-                node.suggest(adjusted, sug, i_ + l_, True, acc + node.str)
-                continue
-
-            if l_ < l_ - 1 and i_ + l_ < len(word_) - 1 and node.str[l_] == word_[i_ + l_ + 1] and \
-                    node.str[l_ + 1] == word_[i_ + l_] and node.str[l_ + 2:] == word_[i_ + l_ + 1 + 1:l_new]:
-                if l_new == len(word_) and node.is_terminal:
-                    sug.add(acc + node.str)
-                node.suggest(word_, sug, i_ + l_, True, acc + node.str)
+            if l_ + 1 < len(word_) and word_[l_ + 1] == node.str[l_]:
+                if word_[l_] in node.children:
+                    adjusted = word_[:l_] + word_[l_ + 1] + word_[l_] + word_[l_ + 1 + 1:]
+                    if l_new == len(word_) and node.is_terminal:
+                        sug.add(acc + node.str)
+                    node.mistake(adjusted[l_new:], sug, acc + node.str)
+                elif l_ < len(node.str) - 1 and node.str[l_ + 1] == word_[l_] and node.str[l_ + 2:] == word_[
+                                                                                                       l_ + 1 + 1:l_new]:
+                    if l_new == len(word_) and node.is_terminal:
+                        sug.add(acc + node.str)
+                    node.mistake(word_[l_new:], sug, acc + node.str)
 
 
 class Trie:
@@ -72,6 +70,9 @@ class Trie:
         self.root = Node(s_='', t_=False)
 
     def add_word(self, word_):
+        # вставка выполняется за O(1) в случае пустого дерева и
+        # за O(n) в худшем случае при полном совпадении слова с уже существующим словом.
+        # В среднем выполняется за O(log(n))
         if word_:
             node_ = self.root.children.get(word_[0])
             if node_ is None:
@@ -79,24 +80,27 @@ class Trie:
                 return
             str_i = 0
             for i_ in range(len(word_)):
-                if not word_[i_] == node_.str[str_i]:
-                    node_.extract(str_i, False)
-                    node_.children[word[i_]] = Node(word[i_:], True)
-                    return
+                if str_i < len(node_.str):
+                    if not word_[i_] == node_.str[str_i]:
+                        node_.split(str_i)
+                        node_.is_terminal = False
+                        node_.children[word[i_]] = Node(word[i_:], True)
                 str_i += 1
-                if str_i == len(node_.str):
-                    next_node, str_i = node_.children.get(word_[i_]), 0
+                if str_i == len(node_.str) and i_ + 1 < len(word_):
+                    next_node, str_i = node_.children.get(word_[i_ + 1]), 0
                     if next_node is None:
-                        node_.children[word_[i_:]] = Node(word_, True)
+                        node_.children[word_[i_ + 1]] = Node(word_[i_ + 1:], True)
                         return
                     node_ = next_node
             if str_i < len(node_.str):
-                node_.extract(str_i, True)
+                node_.split(str_i)
+                node_.is_terminal = True
                 return
-            node_.is_terminal = True
 
     def find(self, word_):
-        if word:
+        # поиск выполняется в среднем за O(log(k) * n),
+        # где k - количество вершин в дереве, n - количество символов в слове
+        if word_ and self.root.children is not None:
             node_ = self.root.children.get(word_[0])
             if node_ is not None:
                 str_i = -1
@@ -113,8 +117,10 @@ class Trie:
         return False
 
     def suggest(self, word_):
+        # алгоритм советования работает за O(m * n^2) в худшем случае
+        # где m - количество вершин дерева, в n - количество символов в слове
         suggests = set()
-        self.root.suggest(word_, suggests, 0, False, '')
+        self.root.suggest(word_, suggests, '')
         return sorted(suggests)
 
 
@@ -125,14 +131,14 @@ if __name__ == '__main__':
         word = input()
         while word is None:
             word = input()
-        t.add_word(word)
+        t.add_word(word.lower())
     for line in fileinput.input():
-        s = line.strip().lower()
+        s = line[:-1]
         if s != '':
-            if t.find(s):
+            if t.find(s.lower()):
                 print(f'{s} - ok')
                 continue
-            k = t.suggest(s)
+            k = t.suggest(s.lower())
             if k:
                 print(f'{s} -> {", ".join(k)}')
                 continue
